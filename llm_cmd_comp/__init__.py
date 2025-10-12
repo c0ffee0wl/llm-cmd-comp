@@ -15,6 +15,7 @@ Return only the command to be executed as a raw string, no string delimiters wra
 Environment: $shell_display on $os_display$env_suffix$pkg_suffix
 
 If there is a lack of details, provide the most logical solution.
+Ensure the output is a valid shell command for the environment.
 If multiple steps are required, try to combine them using '&&' (For PowerShell, use ';' instead).
 
 For example, if the user asks: undo last git commit
