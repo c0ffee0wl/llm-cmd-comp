@@ -4,6 +4,7 @@ import os
 import platform
 import shutil
 import string
+import sys
 from prompt_toolkit import PromptSession
 from prompt_toolkit.input import create_input
 from prompt_toolkit.output import create_output
@@ -204,20 +205,68 @@ def register_commands(cli):
 
 
 def interactive_exec(conversation, command, system):
-    ttyin = create_input(always_prefer_tty=True)
-    ttyout = create_output(always_prefer_tty=True)
-    session = PromptSession(input=ttyin, output=ttyout)
     system = system or SYSTEM_PROMPT
 
+    # Try prompt_toolkit first (works in regular terminal)
+    try:
+        ttyin = create_input(always_prefer_tty=True)
+        ttyout = create_output(always_prefer_tty=True)
+        session = PromptSession(input=ttyin, output=ttyout)
+
+        # Interactive mode with prompt_toolkit
+        command = conversation.prompt(command, system=system)
+        while True:
+            ttyout.write("$ ")
+            for chunk in command:
+                ttyout.write(chunk.replace("\n", "\n> "))
+            command = command.text()
+            ttyout.write("\n# Provide revision instructions; leave blank to finish\n")
+            feedback = session.prompt("> ")
+            if feedback == "":
+                break
+            command = conversation.prompt(feedback, system=system)
+        print(command)
+        return
+    except Exception:
+        pass  # Try manual console I/O fallback
+
+    # Windows fallback: Direct console I/O using CONIN$/CONOUT$ devices
+    # This bypasses prompt_toolkit and works in PSReadLine context
+    try:
+        conin = open('CONIN$', 'r')
+        conout = open('CONOUT$', 'w', buffering=1)
+
+        # Get initial command from LLM
+        command = conversation.prompt(command, system=system)
+
+        # Manual interactive loop
+        while True:
+            # Display suggested command
+            conout.write("$ ")
+            cmd_text = command.text()
+            # Handle multiline commands
+            conout.write(cmd_text.replace("\n", "\n> "))
+            conout.write("\n# Provide revision instructions; leave blank to finish\n> ")
+            conout.flush()
+
+            # Read user feedback
+            feedback = conin.readline().strip()
+            if feedback == "":
+                break
+
+            # Get revised command from LLM
+            command = conversation.prompt(feedback, system=system)
+
+        # Output final command to stdout (captured by shell)
+        print(cmd_text)
+
+        # Clean up
+        conin.close()
+        conout.close()
+        return
+    except Exception:
+        pass  # Fall back to non-interactive
+
+    # Non-interactive fallback: Single LLM call without revisions
     command = conversation.prompt(command, system=system)
-    while True:
-        ttyout.write("$ ")
-        for chunk in command:
-            ttyout.write(chunk.replace("\n", "\n> "))
-        command = command.text()
-        ttyout.write("\n# Provide revision instructions; leave blank to finish\n")
-        feedback = session.prompt("> ")
-        if feedback == "":
-            break
-        command = conversation.prompt(feedback, system=system)
-    print(command)
+    print(command.text())
