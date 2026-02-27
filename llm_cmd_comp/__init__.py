@@ -79,6 +79,9 @@ def register_commands(cli):
             return
 
         prompt = " ".join(args)
+        if not prompt.strip():
+            click.echo("Usage: llm cmdcomp <command description>", err=True)
+            sys.exit(1)
         model_id = model or get_default_model()
         model_obj = llm.get_model(model_id)
         if model_obj.needs_key:
